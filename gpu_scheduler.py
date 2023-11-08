@@ -3,15 +3,19 @@ import time
 import os
 import signal
 import threading
+import logging
 from collections import defaultdict
 from typing import List, Tuple, Dict, Optional
-from logging import getLogger
 from datetime import datetime
 
 from nvitop import Device
-import coloredlogs
 
-coloredlogs.install("INFO")
+try:
+    import coloredlogs
+except ImportError:
+    logging.basicConfig(level=logging.INFO)
+else:
+    coloredlogs.install("INFO")
 
 
 class GPUScheduler:
@@ -38,7 +42,7 @@ class GPUScheduler:
 
         if not os.path.exists(self.logs_dir):
             os.makedirs(self.logs_dir, exist_ok=True)
-        self.logger = getLogger(__name__)
+        self.logger = logging.getLogger(__name__)
         assert 1 <= self.min_gpu_count <= len(self.devices), f"min_gpu_count should be less than {len(self.devices)}"
 
     @property
