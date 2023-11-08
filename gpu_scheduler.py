@@ -5,7 +5,7 @@ import signal
 import threading
 import logging
 from collections import defaultdict
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Union
 from datetime import datetime
 
 from nvitop import Device
@@ -22,6 +22,7 @@ class GPUScheduler:
 
     time_interval = 10
     logs_dir = "logs"
+    global_min_mem_in_gib = 10
 
     def __init__(
         self,
@@ -122,12 +123,16 @@ class GPUScheduler:
 
     def schedule(
         self,
-        cmd_command: List[str],
-        min_mem_in_gib: float,
+        cmd_command: Union[List[str], str],
+        min_mem_in_gib: Optional[float] = None,
         task_name: Optional[str] = None,
         estimated_memory_usage_in_gib: Optional[float] = None,
     ):
         """Add a task to the scheduler."""
+        if isinstance(cmd_command, str):
+            cmd_command = cmd_command.split(" ")
+        if min_mem_in_gib is None:
+            min_mem_in_gib = self.global_min_mem_in_gib
         min_mem = min_mem_in_gib * (1 << 30)
         if estimated_memory_usage_in_gib is None:
             estimated_memory_usage = min_mem
