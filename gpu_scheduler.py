@@ -40,6 +40,7 @@ class GPUScheduler:
         self.gpus_used_by_proc: Dict[int, Tuple[subprocess.Popen, List[int], str, float]] = dict()
         self.estimated_memory_usage_per_gpu: Dict[int, float] = defaultdict(float)
         self.tasks = []
+        self.summary = []
 
         if not os.path.exists(self.logs_dir):
             os.makedirs(self.logs_dir, exist_ok=True)
@@ -108,18 +109,21 @@ class GPUScheduler:
         for d in devices_list:
             self.estimated_memory_usage_per_gpu[d] -= estimated_memory_usage
         self.gpus_used_by_proc.pop(pid)
-        self.logger.info(f"[{task_name}] {pid} Finished: {proc.args}")
+        self.logger.info(f"[{task_name}] {pid} Finished with {proc.returncode}: {proc.args}")
 
         str_stdout = proc.stdout.read().decode('utf-8')
         with open(f"{self.logs_dir}/{task_name}_{pid}.log", "w") as f:
             f.write(str_stdout)
         self.logger.debug(str_stdout)
+        summary_line = str_stdout[-2:]
 
         str_stderr = proc.stderr.read().decode('utf-8')
         if len(str_stderr) > 0:
             with open(f"{self.logs_dir}/{task_name}_{pid}_stderr.log", "w") as f:
                 f.write(str_stderr)
             self.logger.warning(str_stderr)
+            summary_line = str_stderr[-2:]
+        self.summary.append((proc.returncode, f"[{task_name}_{proc.pid}]: {' '.join(proc.args)} returns {proc.returncode}\n{summary_line}"))
 
     def schedule(
         self,
@@ -160,6 +164,7 @@ class GPUScheduler:
 
     def run(self):
         """Start to run all tasks."""
+        self.summary = []
         for cmd_command, min_mem, task_name, estimated_memory_usage in self.tasks:
             devices_list = self._wait_devices(min_mem)
 
@@ -183,11 +188,22 @@ class GPUScheduler:
                 on_exit=on_exit,
                 popen_kwargs=popen_kwargs,
             )
+            time.sleep(self.time_interval)
 
         try:
             self._join_procs()
         except KeyboardInterrupt:
             self._wait_when_error()
+
+        success = 0
+        for returncode, summary in self.summary:
+            if returncode != 0:
+                self.logger.warning(summary)
+            else:
+                self.logger.info(summary)
+                success += 1
+        self.logger.info(f"Success: {success}/{len(self.summary)}")
+
         self.tasks = []
 
     def __enter__(self):
